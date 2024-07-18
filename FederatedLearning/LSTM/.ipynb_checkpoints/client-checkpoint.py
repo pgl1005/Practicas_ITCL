@@ -3,7 +3,6 @@ import torch
 from torch import nn, optim
 from torch.utils.data import DataLoader, TensorDataset
 import pandas as pd
-import numpy as np
 
 # Definir la clase del modelo LSTM
 class LSTMNetwork(nn.Module):
@@ -27,27 +26,25 @@ def load_data():
     return DataLoader(dataset, batch_size=32, shuffle=True)
     
 # Definir funciones de entrenamiento y evaluación
-def train(net, trainloader, epochs):
-    criterion = nn.MSELoss()
-    optimizer = optim.Adam(net.parameters(), lr=0.001)
-    for epoch in range(epochs):
-        for sequences, targets in trainloader:
-            optimizer.zero_grad()
-            outputs = net(sequences)
-            loss = criterion(outputs, targets)
-            loss.backward()
-            optimizer.step()
+def train(net, trainloader, optimizer, criterion):
+    net.train()
+    for sequences, targets in trainloader:
+        optimizer.zero_grad()
+        outputs = net(sequences)
+        loss = criterion(outputs.squeeze(), targets.squeeze())
+        loss.backward()
+        optimizer.step()
 
-def test(net, testloader):
-    criterion = nn.MSELoss()
+def evaluate(net, testloader, criterion):
+    net.eval()
     loss = 0
     correct = 0
     total = 0
     with torch.no_grad():
         for sequences, targets in testloader:
             outputs = net(sequences)
-            loss += criterion(outputs, targets).item()
-            predicted = (outputs > 0.5).float()  # Considera un umbral de 0.5 para binarizar la salida
+            loss += criterion(outputs.squeeze(), targets.squeeze()).item()
+            predicted = (torch.sigmoid(outputs) > 0.5).float()
             correct += (predicted == targets).sum().item()
             total += targets.size(0)
     accuracy = correct / total
@@ -57,11 +54,14 @@ def test(net, testloader):
 # Crear cliente Flower
 class FlowerClient(fl.client.NumPyClient):
     def __init__(self):
+        super().__init__()
         self.net = LSTMNetwork(input_size=213, hidden_size=50, output_size=1)
         self.trainloader = load_data()
         self.testloader = load_data()
+        self.optimizer = optim.Adam(self.net.parameters(), lr=0.001)
+        self.criterion = nn.BCEWithLogitsLoss()
 
-    def get_parameters(self, config):
+    def get_parameters(self):
         return [val.cpu().numpy() for val in self.net.state_dict().values()]
 
     def set_parameters(self, parameters):
@@ -71,13 +71,12 @@ class FlowerClient(fl.client.NumPyClient):
 
     def fit(self, parameters, config):
         self.set_parameters(parameters)
-        train(self.net, self.trainloader, epochs=1)
-        return self.get_parameters(config), len(self.trainloader.dataset), {}
+        train(self.net, self.trainloader, self.optimizer, self.criterion)
+        return self.get_parameters(), len(self.trainloader.dataset), {}
 
     def evaluate(self, parameters, config):
         self.set_parameters(parameters)
-        loss, accuracy = test(self.net, self.testloader)
-        return loss, len(self.testloader.dataset), {"accuracy": accuracy}  # Devolver también la precisión
+        return evaluate(self.net, self.testloader, self.criterion)
 
 # Iniciar el cliente Flower
 if __name__ == "__main__":

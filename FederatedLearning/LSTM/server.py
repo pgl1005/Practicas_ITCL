@@ -4,15 +4,13 @@ def weighted_average(metrics):
     if not metrics or isinstance(metrics, (int, float)):
         return {"accuracy": 0.0, "loss": 0.0}
     
-    accuracies = [num_examples * m["accuracy"] for num_examples, m in metrics]
-    losses = [num_examples * m.get("loss", 0.0) for num_examples, m in metrics]  # Use m.get("loss", 0.0) to handle missing key
-    examples = [num_examples for num_examples, _ in metrics]
+    total_examples = sum(num_examples for num_examples, _ in metrics)
     
-    if sum(examples) == 0:
+    if total_examples == 0:
         return {"accuracy": 0.0, "loss": 0.0}
     
-    weighted_accuracy = sum(accuracies) / sum(examples)
-    weighted_loss = sum(losses) / sum(examples)
+    weighted_accuracy = sum(num_examples * m["accuracy"] for num_examples, m in metrics) / total_examples
+    weighted_loss = sum(num_examples * m.get("loss", 0.0) for num_examples, m in metrics) / total_examples
     
     return {"accuracy": weighted_accuracy, "loss": weighted_loss}
 
@@ -23,7 +21,7 @@ strategy = fl.server.strategy.FedAvg(
 if __name__ == "__main__":
     hist = fl.server.start_server(
         server_address="127.0.0.1:8080",
-        config=fl.server.ServerConfig(num_rounds=3),
+        config=fl.server.ServerConfig(num_rounds=5),  # Aumentar el número de rondas para más entrenamiento
         strategy=strategy,
     )
 
