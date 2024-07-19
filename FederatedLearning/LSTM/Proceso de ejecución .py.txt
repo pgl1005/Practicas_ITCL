@@ -1,0 +1,12 @@
+Existen 3 archivos .py con los que he trabajado: customServer.py (que contiene el código para la creación del servidor), metricasCliente.py (que contiene el código de los clientes), y start_clients.py (que contiene el código para iniciar los clientes).
+Para poder ejecutarlos, he abierto 2 Anaconda Prompts, uno para iniciar el servidor y otro para iniciar los clientes.
+Para ello, los dos primeros comandos en ambos prompts son iguales. El primer comando es: conda activate mi_entorno_virtual, con esto entramos en nuestro entorno virtual, después avanzamos hasta la ubicación donde se encuentran los documentos .py, con cd RutaDocumentos.
+Ahora hay que ejecutar los archivos, para ello en un prompt se debe escribir python customServer.py, para ejecutar el servidor, y en el otro prompt se debe escribir start_clients.py, así se inician todos los clientes.
+Una vez ejecutados, al finalizar las rondas, aparecerán las diferentes precisiones.
+
+
+
+
+
+
+
