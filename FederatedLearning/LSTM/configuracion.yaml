@@ -1,0 +1,20 @@
+# configuracion.yaml
+
+model:
+  input_dim: 213
+  hidden_dim: 2
+  num_layers: 2
+  output_dim: 2
+
+training:
+  learning_rate: 0.001
+  batch_size: 32
+  epochs: 5
+  dropout_rate: 0.5
+
+server:
+  num_rounds: 3
+  save_model_directory: "/models"
+
+client:
+  num_clients: 5

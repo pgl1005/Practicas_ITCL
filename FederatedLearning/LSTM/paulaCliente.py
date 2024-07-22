@@ -8,12 +8,13 @@ import torch.nn as nn
 from torch.utils.data import DataLoader, Dataset
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
-from sklearn.metrics import precision_score, recall_score, f1_score  # Importar métricas de sklearn
+from sklearn.metrics import precision_score, recall_score, f1_score
 import pandas as pd
 from argparse import ArgumentParser
 import logging
+import os
 
-logging.basicConfig(level=logging.ERROR)
+logging.basicConfig(level=logging.INFO)
 
 warnings.filterwarnings("ignore", category=UserWarning)
 DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -22,6 +23,7 @@ DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 parser = ArgumentParser(description="Flower Client")
 parser.add_argument('--server_address', type=str, default="127.0.0.1:8080", help="Address of the Flower server")
 parser.add_argument('--partition_id', type=int, default=0, help="Partition ID for the client")
+parser.add_argument('--round', type=int, default=1, help="Current round number")  # Added round argument
 args = parser.parse_args()
 
 # Load and preprocess data
@@ -79,15 +81,15 @@ class LSTMNet(nn.Module):
         return out
 
 input_dim = X.shape[1]
-hidden_dim = 64
+hidden_dim = 2  
 output_dim = 2  # Cambiado a 2 para clasificación binaria con CrossEntropyLoss
 num_layers = 2
 net = LSTMNet(input_dim, hidden_dim, num_layers, output_dim).to(DEVICE)
 
 def train(model, dataloader, epochs):
     criterion = nn.CrossEntropyLoss()
-    optimizer = Adam(model.parameters(), lr=0.001)
-    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=5, gamma=0.1)
+    optimizer = Adam(model.parameters(), lr=0.001, weight_decay=1e-5)  # L2 regularization
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.1, patience=10)
     model.train()
     
     for epoch in range(epochs):
@@ -99,7 +101,9 @@ def train(model, dataloader, epochs):
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
-        scheduler.step()
+        
+        val_loss, _, _, _ = test(model, dataloader)  # Use a validation set instead of test set for early stopping
+        scheduler.step(val_loss)
 
 def test(model, dataloader):
     criterion = nn.CrossEntropyLoss()
@@ -142,6 +146,16 @@ class FlowerClient(NumPyClient):
     def fit(self, parameters, config):
         self.set_parameters(parameters)
         train(net, trainloader, epochs=1)
+        
+        # Crear carpeta para el modelo si no existe
+        model_dir = f'models/round_{args.round}'
+        os.makedirs(model_dir, exist_ok=True)
+        
+        # Guardar el modelo local después del entrenamiento
+        model_path = os.path.join(model_dir, f'submodelo_c{args.partition_id + 1}.pth')
+        torch.save(net.state_dict(), model_path)
+        print(f'Modelo guardado en {model_path}')
+
         return self.get_parameters(config={}), len(trainloader.dataset), {}
 
     def evaluate(self, parameters, config):
@@ -154,3 +168,10 @@ def client_fn(cid: str):
 
 if __name__ == "__main__":
     start_client(server_address=args.server_address, client=client_fn(""))
+
+
+
+
+
+
+
