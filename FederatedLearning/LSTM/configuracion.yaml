@@ -13,8 +13,8 @@ training:
   dropout_rate: 0.5
 
 server:
-  num_rounds: 3
+  num_rounds: 6
   save_model_directory: "/models"
 
 client:
-  num_clients: 5
+  num_clients: 6

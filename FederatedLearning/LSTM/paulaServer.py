@@ -1,54 +1,90 @@
-
-from typing import List, Tuple, Dict, Any
-from flwr.server import ServerApp, ServerConfig
-from flwr.server.strategy import FedAvg
-from flwr.common import Metrics
-import logging
-import torch
+import subprocess
 import os
-import yaml
+import json
+import logging
+import datetime
+import numpy as np
+import flwr as fl
+import tensorflow as tf
+from tensorflow import keras
+from typing import List, Dict, Tuple, Any
 
 logging.basicConfig(level=logging.INFO)
 
+metrics_path = "modelos_guardados/metrics.json"
+save_model_directory = "modelos_guardados"
 
-# Define metric aggregation function
-def weighted_average(metrics: List[Tuple[int, Metrics]]) -> Metrics:
-    """Aggregate metrics by computing weighted average of accuracy."""
-    try:
-        accuracies = [num_examples * m.get("accuracy", 0) for num_examples, m in metrics]
-        examples = [num_examples for num_examples, _ in metrics]
-        return {"accuracy": sum(accuracies) / sum(examples) if examples else 0}
-    except Exception as e:
-        logging.error(f'Error during metrics aggregation: {e}')
-        return {"accuracy": 0}
+def aggregate_fit_metrics(metrics: List[Tuple[float, Dict[str, float]]]) -> Dict[str, float]:
+    losses = [m[1]["loss"] for m in metrics]
+    accuracies = [m[1]["accuracy"] for m in metrics]
 
+    avg_loss = np.mean(losses)
+    avg_accuracy = np.mean(accuracies)
 
-class FedAvgWithModelSaving(FedAvg):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    logging.info(f"Average loss = {avg_loss:.4f}, Average accuracy = {avg_accuracy:.4f}")
+
+    metrics_data = load_metrics()
+    round_number = len(metrics_data) + 1
+    metrics_data[round_number] = {"loss": avg_loss, "accuracy": avg_accuracy}
+    save_metrics(metrics_data)
+
+    return {"loss": avg_loss, "accuracy": avg_accuracy}
+
+def save_metrics(metrics_data: Dict[int, Dict[str, float]]):
+    with open(metrics_path, "w") as file:
+        json.dump(metrics_data, file)
+
+def load_metrics() -> Dict[int, Dict[str, float]]:
+    if os.path.exists(metrics_path):
+        with open(metrics_path, "r") as file:
+            return json.load(file)
+    return {}
+
+def save_global_model(weights: List[np.ndarray], round_number: int):
+    model = build_model()
+    model.set_weights(weights)
+    os.makedirs(save_model_directory, exist_ok=True)
+    round_dir = os.path.join(save_model_directory, f'round_{round_number}')
+    os.makedirs(round_dir, exist_ok=True)
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    model_save_path = os.path.join(round_dir, f"global_model_{timestamp}.keras")
+    model.save(model_save_path)
+    logging.info(f'Saved global model for round {round_number}: {model_save_path}')
+
+def build_model() -> keras.Model:
+    model = keras.Sequential([
+        keras.Input(shape=(28, 28)),
+        keras.layers.Flatten(),
+        keras.layers.Dense(128, activation='relu'),
+        keras.layers.Dense(10, activation='softmax')
+    ])
+    model.compile(optimizer='adam',
+                  loss='sparse_categorical_crossentropy',
+                  metrics=['accuracy'])
+    return model
+
+# Define la estrategia
+class CustomFedAvg(fl.server.strategy.FedAvg):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
         self.client_id_mapping = {}
         self.next_client_id = 0
         self.previous_model_parameters = None
 
-    def aggregate_fit(self, rnd: int, results: List[Tuple[Any, Dict[str, torch.Tensor]]], failures: List[Tuple[int, Exception]]) -> Dict[str, torch.Tensor]:
+    def aggregate_fit(self, rnd: int, results: List[Tuple[Any, fl.common.FitRes]], failures: List[BaseException]) -> Tuple[fl.common.Parameters, Dict[str, fl.common.Scalar]]:
         try:
-            # Aggregate the local models
-            aggregated_parameters = super().aggregate_fit(rnd, results, failures)
+            aggregated_parameters, aggregated_metrics = super().aggregate_fit(rnd, results, failures)
             
-            # Ensure the round directory exists
-            round_dir = f'models/round_{rnd + 1}'
+            if aggregated_parameters is not None:
+                weights = fl.common.parameters_to_ndarrays(aggregated_parameters)
+                save_global_model(weights, rnd)
+            
+            round_dir = os.path.join(save_model_directory, f'round_{rnd}')
             os.makedirs(round_dir, exist_ok=True)
             
-            # Save the global model after aggregation
-            model_file_name = os.path.join(round_dir, 'global_model.pth')
-            torch.save(aggregated_parameters, model_file_name)
-            logging.info(f'Saved global model for round {rnd + 1}: {model_file_name}')
-            
-            # Save each local model
-            for client, client_weights in results:
-                original_client_id = client.cid  # Extract the original client id
+            for client, fit_res in results:
+                original_client_id = client.cid
 
-                # Map original client id to a simpler id if not already mapped
                 if original_client_id not in self.client_id_mapping:
                     self.client_id_mapping[original_client_id] = self.next_client_id
                     self.next_client_id += 1
@@ -56,103 +92,43 @@ class FedAvgWithModelSaving(FedAvg):
                 simple_client_id = self.client_id_mapping[original_client_id]
                 logging.info(f'Client ID: {original_client_id} mapped to {simple_client_id}')
 
-                client_model_file_name = os.path.join(round_dir, f'client_{simple_client_id}.pth')
-                torch.save(client_weights, client_model_file_name)
-                logging.info(f'Saved local model for client {simple_client_id} for round {rnd + 1}: {client_model_file_name}')
+                client_model_file_name = os.path.join(round_dir, f'client_{simple_client_id}.keras')
+                model = build_model()
+                model.set_weights(fl.common.parameters_to_ndarrays(fit_res.parameters))
+                model.save(client_model_file_name)
+                logging.info(f'Saved local model for client {simple_client_id} for round {rnd}: {client_model_file_name}')
 
-            # Compare the weights
-            self.compare_weights(rnd, aggregated_parameters)
-
-            # Update the previous model parameters for the next round
             self.previous_model_parameters = aggregated_parameters
 
-            return aggregated_parameters
+            return aggregated_parameters, aggregated_metrics
 
         except Exception as e:
             logging.error(f'Error during aggregation or model saving: {e}')
             raise
 
-    def aggregate_evaluate(self, rnd: int, results: List[Tuple[float, Dict[str, torch.Tensor]]], failures: List[Tuple[int, Exception]]) -> Tuple[float, Dict[str, float]]:
-        """Aggregates the evaluation results from clients."""
-        try:
-            # Initialize variables to calculate average loss
-            total_loss = 0.0
-            count = 0
-        
-            for result in results:
-                if isinstance(result, tuple) and len(result) == 2:
-                    loss, _ = result
-                    if isinstance(loss, (int, float)):  # Ensure loss is a number
-                        total_loss += loss
-                        count += 1
-                    else:
-                        logging.warning(f'Unexpected loss type: {type(loss)}')
-                else:
-                    logging.warning(f'Unexpected result format: {result}')
-        
-            average_loss = total_loss / count if count > 0 else float('nan')
-        
-            # Return both the average loss and a dictionary of metrics
-            logging.info("Aggregated evaluation results")
-            return average_loss, {"average_loss": average_loss}
-
-        except Exception as e:
-            logging.error(f'Error during evaluation aggregation: {e}')
-            raise
-
-
-
-    def compare_weights(self, rnd: int, curr_model_parameters: Dict[str, torch.Tensor]):
-        """Compares the weights of the model between rounds."""
-        if self.previous_model_parameters is None:
-            logging.info('Not enough data to compare weights.')
-            return
-
-        try:
-            # Compare parameters
-            for param_name in curr_model_parameters.keys():
-                prev_param = self.previous_model_parameters[param_name]
-                curr_param = curr_model_parameters[param_name]
-                if not torch.allclose(prev_param, curr_param):
-                    logging.info(f'Weights have changed for parameter: {param_name}')
-                else:
-                    logging.info(f'Weights are unchanged for parameter: {param_name}')
-
-        except Exception as e:
-            logging.error(f'Error during weight comparison: {e}')
-
-def load_config(yaml_file: str) -> Dict[str, Any]:
-    """Load configuration from a YAML file."""
-    with open(yaml_file, 'r') as file:
-        config = yaml.safe_load(file)
-    return config
-
-# Load configuration from YAML
-config_file = 'configuracion.yaml'  # Ensure this path is correct
-config_data = load_config(config_file)
-num_rounds = config_data['server']['num_rounds']
-
-# Define strategy
-strategy = FedAvgWithModelSaving(
-    evaluate_metrics_aggregation_fn=weighted_average,
-    fit_metrics_aggregation_fn=weighted_average  # Assuming you want the same aggregation function for fit metrics
+strategy = CustomFedAvg(
+    fraction_fit=1.0,
+    min_fit_clients=2,
+    min_available_clients=2,
+    initial_parameters=None,
+    on_fit_config_fn=lambda rnd: {"round": rnd},
+    fit_metrics_aggregation_fn=aggregate_fit_metrics
 )
 
-# Define config
-config = ServerConfig(num_rounds=num_rounds)  # Use loaded number of rounds
-
-# Flower ServerApp
-app = ServerApp(
-    config=config,
-    strategy=strategy,
-)
-
-# Legacy mode
-if __name__ == "__main__":
-    from flwr.server import start_server
-
-    start_server(
-        server_address="0.0.0.0:8080",
-        config=config,
+def start_server():
+    fl.server.start_server(
+        server_address="localhost:8080",
+        config=fl.server.ServerConfig(num_rounds=6),
         strategy=strategy,
     )
+    print_summary()
+
+def print_summary():
+    metrics_data = load_metrics()
+    
+    logging.info("\nTraining Summary:")
+    for rnd, metrics in metrics_data.items():
+        logging.info(f"Round {rnd}: Loss = {metrics['loss']:.4f}, Accuracy = {metrics['accuracy']:.4f}")
+
+if __name__ == "__main__":
+    start_server()
