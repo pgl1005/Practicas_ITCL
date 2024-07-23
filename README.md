@@ -1,12 +1,11 @@
-
 # Aprendizaje en ITCL <img src="https://github.com/user-attachments/assets/408526ee-cde2-4843-a1e5-3b29865b822a" align="right" width="250">
 
-Dos carpetas principales existentes en este repositorio se centran en el aprendizaje de varios modelos de aprendizaje automático y la implementación de Federated Learning (FL) utilizando una variedad de técnicas de agregación, como el bagging.
-El repositorio de aprendizaje federado tiene una estructura que contiene scripts de implementación de aprendizaje federado que utilizan una variedad de modelos, como redes neuronales, redes neuronales convolucionales (CNN) y redes neuronales recurrentes (LSTM). Además, para integrar los modelos locales en un modelo global, se utilizan técnicas de aprendizaje federado y bagging.
+Dos carpetas principales existentes en este repositorio se centran en el aprendizaje de varios modelos de aprendizaje automático y la implementación de Federated Learning (FL) utilizando técnicas de agregación, como el bagging.
+El repositorio de aprendizaje federado tiene una estructura que contiene scripts de implementación de aprendizaje federado que utilizan una variedad de modelos, como redes neuronales y redes neuronales recurrentes (LSTM). Además, para integrar los modelos locales en un modelo global, se utilizan técnicas de aprendizaje federado y bagging.
 
 # Estructura del repositorio
-El repositorio contiene 2 carpetas _FederatedLearning_ y _ScriptsDeFormacion_. La carpeta de FederatedLearning contiene scripts de implementación de aprendizaje federado que utilizan una variedad de modelos, como redes neuronales, redes neuronales convolucionales (CNN), redes neuronales recurrentes (LSTM) o árboles de decisión. Estos scripts servirán posteriormente para el proyecto Europeo-AI4Hope descrito en la memoria de prácticas.
-La carpeta ScriptsDeFormacion contiene ejemplos de modelos de aprendizaje de árboles de decisión, redes neuronales, CNN y LSTM. Estos ejemplos se realizaron durante la primera semana de prácticas, los cuales ayudaron a la posterior implementación con Federated Learning.
+El repositorio contiene 2 carpetas _FederatedLearning_ y _ScriptsDeFormacion_. La carpeta de FederatedLearning contiene scripts de implementación de aprendizaje federado que utilizan una variedad de modelos, como redes neuronales, redes neuronales recurrentes (LSTM) o árboles de decisión. Estos scripts servirán posteriormente para el proyecto Europeo I4Hope descrito en la memoria de prácticas.
+La carpeta ScriptsDeFormacion contiene ejemplos de modelos de aprendizaje de árboles de decisión, redes neuronales y LSTM. Estos ejemplos se realizaron durante la primera semana de prácticas, los cuales ayudaron a la posterior implementación con Federated Learning.
 
 # Contenido de las carpetas 
 ### Federated Learning
@@ -17,7 +16,10 @@ Los script en esta carpeta muestran cómo implementar Federated Learning con var
 - ArbolDeDecisionTensorFlow.ipynb: utiliza los árboles de decisión para implementar el aprendizaje federado a través de la librería TensorFlow.
 - ModeloRedNeuronal.ipynb: utiliza redes neuronales simples para implementar el aprendizaje federado.
 - RedesRecurrentesLSTM.ipynb: utiliza redes neuronales recurrentes para implementar el aprendizaje federado.
-- CNN.ipynb: utiliza redes neuronales convolucionales para implementar el aprendizaje federado.
+- paulaCliente.py: Determina el comportamiento del cliente en un ambiente de aprendizaje federado, usando TensorFlow y Flower. Incluye el desarrollo y el entrenamiento de un modelo de red neuronal básico, así como el uso de métodos para adquirir, ajustar y evaluar los parámetros del modelo.
+- paulaServer.py: Con Flower, configura y ejecuta el servidor de aprendizaje federado. Guarda los modelos locales y globales, registra las métricas de rendimiento en cada ronda y establece una estrategia personalizada para la agregación de los modelos entrenados por los clientes.
+- start_clients.py: Inicia instancias adicionales del cliente de aprendizaje federado. Ejecuta múltiples instancias de paulaCliente.py, cada una de las cuales se conecta al servidor y participa en el entrenamiento federado, se emplea la librería subprocess.
+
 
 ### Scripts de Formación
 Esta carpeta contiene scripts de formación individuales para aprender sobre varios modelos de aprendizaje automático. Sus archivos principales y sus descripciones son:

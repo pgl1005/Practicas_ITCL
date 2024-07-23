@@ -41,11 +41,6 @@ class MnistClient(fl.client.NumPyClient):
         save_dir = "modelos_guardados"
         os.makedirs(save_dir, exist_ok=True)
         
-        round_number = config.get('round', 0)
-        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        unique_client_id = config.get('client_id', 'default')  # Use a unique client ID if available
-        model_save_path = os.path.join(save_dir, f"model_round_{round_number}_{unique_client_id}_{timestamp}.keras")
-        
         try:
        
             model.save(model_save_path)

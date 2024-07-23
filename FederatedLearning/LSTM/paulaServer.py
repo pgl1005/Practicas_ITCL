@@ -23,11 +23,6 @@ def aggregate_fit_metrics(metrics: List[Tuple[float, Dict[str, float]]]) -> Dict
 
     logging.info(f"Average loss = {avg_loss:.4f}, Average accuracy = {avg_accuracy:.4f}")
 
-    metrics_data = load_metrics()
-    round_number = len(metrics_data) + 1
-    metrics_data[round_number] = {"loss": avg_loss, "accuracy": avg_accuracy}
-    save_metrics(metrics_data)
-
     return {"loss": avg_loss, "accuracy": avg_accuracy}
 
 def save_metrics(metrics_data: Dict[int, Dict[str, float]]):
